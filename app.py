@@ -3,67 +3,77 @@ import pandas as pd
 from collections import Counter
 
 # 1. 頁面設定
-st.set_page_config(page_title="539 大數據拖牌建模", layout="wide")
-st.title("🧪 539 大數據規律分析 (純數據版)")
+st.set_page_config(page_title="539 大數據預測模型", layout="centered")
+st.title("🧪 539 大數據建模規律分析")
+st.write("---")
 
-# 2. 載入歷史檔案
+# 2. 載入 GitHub 上的歷史大數據 (history.csv)
 @st.cache_data
-def load_data():
+def load_year_data():
+    # 讀取你的 GitHub 原始檔案地址
     url = "https://raw.githubusercontent.com/a0985122687-glitch/Lotto539-Analysis/main/history.csv"
     try:
         df = pd.read_csv(url)
-        # 轉換日期格式並確保數字為整數
-        df['date'] = pd.to_datetime(df['date']).dt.date
+        # 確保數字格式正確
         for col in ['n1','n2','n3','n4','n5']:
             df[col] = df[col].astype(int)
-        # 按日期排序，最新的在上面
-        df = df.sort_values('date', ascending=False)
-        return df
+        # 依日期排序
+        return df.sort_values('date')
     except:
         return pd.DataFrame()
 
-df = load_data()
+df = load_year_data()
 
 if not df.empty:
-    st.success(f"📈 大數據庫已載入！目前共累積：{len(df)} 期數據。")
-
-    # --- 區塊一：歷史獎號表格 (方便觀察) ---
-    st.header("📋 歷史開獎實際號碼總覽")
-    st.dataframe(df, use_container_width=True, hide_index=True)
-
-    # --- 區塊二：拖牌規律分析 ---
-    st.divider()
-    st.header("🔍 拖牌規律分析")
-    st.write("概念：當某個號碼開出後，下一期最常跟著開出什麼？")
+    total_records = len(df)
+    st.info(f"📊 已成功匯入大數據庫，目前累積樣本：{total_records} 期。")
     
-    target_num = st.selectbox("請選擇一個觀測號碼：", range(1, 40))
+    # --- 核心邏輯：拖牌連動分析 ---
+    st.header("🔍 拖牌規律建模")
+    st.write("概念：分析歷史上當「觀測號碼」出現後，下一期緊接著開出的號碼頻率。")
+
+    # 讓使用者選擇昨晚開出的號碼作為觀測點
+    target = st.selectbox("🎯 請選擇昨晚開出的其中一個號碼：", range(1, 40), index=0)
     
-    # 邏輯計算：找出選定號碼的下一期號碼 (需按日期順序計算)
-    df_sorted = df.sort_values('date') # 改回正序計算拖牌
-    next_issue_nums = []
-    for i in range(len(df_sorted) - 1):
-        current_row = df_sorted.iloc[i][['n1','n2','n3','n4','n5']].values
-        if target_num in current_row:
-            next_row = df_sorted.iloc[i+1][['n1','n2','n3','n4','n5']].values
-            next_issue_nums.extend(next_row)
-            
-    if next_issue_nums:
-        next_counts = Counter(next_issue_nums)
-        top_5 = next_counts.most_common(5)
+    # 計算拖牌規律
+    next_nums = []
+    for i in range(total_records - 1):
+        # 如果這一期包含觀測號碼
+        if target in df.iloc[i][['n1','n2','n3','n4','n5']].values:
+            # 紀錄下一期的所有號碼
+            following = df.iloc[i+1][['n1','n2','n3','n4','n5']].values
+            next_nums.extend(following)
+
+    if next_nums:
+        counts = Counter(next_nums)
+        # 取得最常出現的前 6 名
+        predictions = counts.most_common(6)
         
-        st.subheader(f"當 {target_num:02d} 開出後，下一期歷史統計最常出現：")
-        cols = st.columns(5)
-        for idx, (num, count) in enumerate(top_5):
-            cols[idx].metric(f"熱門 No.{idx+1}", f"{num:02d}", f"出現 {count} 次")
+        st.subheader(f"💡 根據歷史數據，當 {target:02d} 開出後，下一期最推薦：")
+        
+        # 使用直觀的指標呈現建議號碼
+        cols = st.columns(3)
+        for idx, (num, count) in enumerate(predictions):
+            with cols[idx % 3]:
+                st.metric(label=f"建議號碼 {idx+1}", value=f"{num:02d}", delta=f"歷史連動 {count} 次")
     else:
-        st.info("⚠️ 目前數據量較少（僅 2 期無法計算隔期拖牌），請繼續增加歷史數據至 history.csv 以啟動分析。")
+        st.warning("⚠️ 目前數據樣本量尚不足以計算此號碼的規律，請繼續增加 history.csv 的期數。")
 
-    # --- 區塊三：數據加強建議 ---
+    # --- 區塊二：年度綜合建模建議 ---
     st.divider()
-    st.subheader("💡 下一步建議")
-    if len(df) < 50:
-        st.warning("當前數據量不足 50 期，分析結果僅供參考。建議至少匯入近一年的數據。")
-    st.write("您可以手動更新 GitHub 上的 `history.csv`，只要增加一行數據，App 就會自動更新分析結果。")
+    st.header("🔮 下一階段建模建議")
+    
+    all_year_nums = df[['n1','n2','n3','n4','n5']].values.flatten()
+    year_counts = Counter(all_year_nums)
+    
+    # 找出全年度最熱門的號碼 (作為穩定的膽碼參考)
+    top_annual = [f"{n:02d}" for n, c in year_counts.most_common(5)]
+    
+    st.write(f"📊 **全年度熱門膽碼建議**（根據這 {total_records} 期統計）：")
+    st.success(f"🔥 強勢候選：{', '.join(top_annual)}")
+    
+    st.write("---")
+    st.caption("數據驅動分析，僅供參考，請理性投注。您可以隨時在 GitHub 更新 history.csv 以優化模型準確度。")
 
 else:
-    st.error("找不到 history.csv 或格式錯誤。請確保檔案內容包含 date, n1, n2, n3, n4, n5 欄位。")
+    st.error("找不到數據庫，請檢查 GitHub 上的 history.csv 內容。")
