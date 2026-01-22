@@ -1,69 +1,69 @@
 import streamlit as st
 import pandas as pd
 from collections import Counter
-import plotly.express as px
 
-st.set_page_config(page_title="539 大數據規律分析", layout="wide")
-st.title("🧪 539 大數據拖牌規律建模")
+# 1. 頁面設定
+st.set_page_config(page_title="539 大數據拖牌建模", layout="wide")
+st.title("🧪 539 大數據規律分析 (純數據版)")
 
-# 1. 載入一整年的歷史檔案
+# 2. 載入歷史檔案
 @st.cache_data
-def load_year_data():
+def load_data():
     url = "https://raw.githubusercontent.com/a0985122687-glitch/Lotto539-Analysis/main/history.csv"
     try:
         df = pd.read_csv(url)
-        # 確保數字格式正確
+        # 轉換日期格式並確保數字為整數
+        df['date'] = pd.to_datetime(df['date']).dt.date
         for col in ['n1','n2','n3','n4','n5']:
             df[col] = df[col].astype(int)
+        # 按日期排序，最新的在上面
+        df = df.sort_values('date', ascending=False)
         return df
     except:
         return pd.DataFrame()
 
-df = load_year_data()
+df = load_data()
 
 if not df.empty:
-    st.success(f"📈 成功讀取大數據庫！當前累積期數：{len(df)} 期")
-    
-    # --- 區塊一：年度熱度分布 ---
-    st.header("1️⃣ 年度號碼熱度總覽")
-    all_nums = df[['n1','n2','n3','n4','n5']].values.flatten()
-    counts = Counter(all_nums)
-    stat_df = pd.DataFrame([{"號碼": i, "次數": counts.get(i, 0)} for i in range(1, 40)])
-    
-    fig = px.bar(stat_df, x='號碼', y='次數', color='次數', 
-                 title="39 個號碼出現頻率 (次數越多越熱門)", color_continuous_scale='Viridis')
-    st.plotly_chart(fig, use_container_width=True)
+    st.success(f"📈 大數據庫已載入！目前共累積：{len(df)} 期數據。")
 
-    # --- 區塊二：專業拖牌規律分析 ---
+    # --- 區塊一：歷史獎號表格 (方便觀察) ---
+    st.header("📋 歷史開獎實際號碼總覽")
+    st.dataframe(df, use_container_width=True, hide_index=True)
+
+    # --- 區塊二：拖牌規律分析 ---
     st.divider()
-    st.header("2️⃣ 拖牌規律：幾期前開了什麼，下一期會開什麼？")
+    st.header("🔍 拖牌規律分析")
+    st.write("概念：當某個號碼開出後，下一期最常跟著開出什麼？")
     
-    target_num = st.selectbox("請選擇昨晚開出的其中一個號碼：", range(1, 40))
+    target_num = st.selectbox("請選擇一個觀測號碼：", range(1, 40))
     
-    # 邏輯：找出 target_num 出現的期數，並抓取下一期的所有號碼
+    # 邏輯計算：找出選定號碼的下一期號碼 (需按日期順序計算)
+    df_sorted = df.sort_values('date') # 改回正序計算拖牌
     next_issue_nums = []
-    for i in range(len(df) - 1):
-        current_row = df.iloc[i][['n1','n2','n3','n4','n5']].values
+    for i in range(len(df_sorted) - 1):
+        current_row = df_sorted.iloc[i][['n1','n2','n3','n4','n5']].values
         if target_num in current_row:
-            # 抓取「隔一期」的號碼
-            next_row = df.iloc[i+1][['n1','n2','n3','n4','n5']].values
+            next_row = df_sorted.iloc[i+1][['n1','n2','n3','n4','n5']].values
             next_issue_nums.extend(next_row)
             
     if next_issue_nums:
         next_counts = Counter(next_issue_nums)
-        next_df = pd.DataFrame(next_counts.most_common(5), columns=['號碼', '歷史拖出次數'])
+        top_5 = next_counts.most_common(5)
         
-        st.write(f"🔍 分析結果：在歷史上，當 **{target_num:02d}** 開出後，隔一期最常開出的前 5 名：")
+        st.subheader(f"當 {target_num:02d} 開出後，下一期歷史統計最常出現：")
         cols = st.columns(5)
-        for idx, row in next_df.iterrows():
-            cols[idx].metric(f"Top {idx+1}", f"{int(row['號碼']):02d}", f"出現 {int(row['歷史拖出次數'])} 次")
+        for idx, (num, count) in enumerate(top_5):
+            cols[idx].metric(f"熱門 No.{idx+1}", f"{num:02d}", f"出現 {count} 次")
     else:
-        st.info("目前的數據庫太小，還找不出這號碼的拖牌規律。")
+        st.info("⚠️ 目前數據量較少（僅 2 期無法計算隔期拖牌），請繼續增加歷史數據至 history.csv 以啟動分析。")
 
-    # --- 區塊三：下一階段建議 ---
+    # --- 區塊三：數據加強建議 ---
     st.divider()
-    st.subheader("💡 建模預測建議")
-    st.write("建議策略：從「年度熱門區」選 2 個，從上面「拖牌規律」選 2 個，最後搭配 1 個「長期冷門號」。")
+    st.subheader("💡 下一步建議")
+    if len(df) < 50:
+        st.warning("當前數據量不足 50 期，分析結果僅供參考。建議至少匯入近一年的數據。")
+    st.write("您可以手動更新 GitHub 上的 `history.csv`，只要增加一行數據，App 就會自動更新分析結果。")
 
 else:
-    st.error("請確認 GitHub 上的 history.csv 內容是否正確（需包含 date, n1, n2, n3, n4, n5 欄位）。")
+    st.error("找不到 history.csv 或格式錯誤。請確保檔案內容包含 date, n1, n2, n3, n4, n5 欄位。")
